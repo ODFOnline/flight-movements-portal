@@ -1,0 +1,65 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "sqlite"; url = env("DATABASE_URL") }
+
+model Member {
+  id          Int          @id @default(autoincrement())
+  fullName    String       @unique
+  knownAs     String?
+  createdAt   DateTime     @default(now())
+  flights     Flight[]
+  itineraries Itinerary[]
+  users       User[]
+}
+
+model Itinerary {
+  id         Int      @id @default(autoincrement())
+  pnr        String?
+  vendorRef  String?
+  pdfPath    String
+  uploadedAt DateTime @default(now())
+  member     Member   @relation(fields: [memberId], references: [id])
+  memberId   Int
+  flights    Flight[]
+}
+
+model Flight {
+  id          Int      @id @default(autoincrement())
+  carrier     String
+  flightNum   String
+  departIATA  String
+  departName  String
+  departDT    DateTime
+  arriveIATA  String
+  arriveName  String
+  arriveDT    DateTime
+  equipment   String?
+  pnr         String?
+  segmentIdx  Int
+  member      Member   @relation(fields: [memberId], references: [id])
+  memberId    Int
+  itinerary   Itinerary @relation(fields: [itineraryId], references: [id])
+  itineraryId Int
+}
+
+enum Role { USER ADMIN }
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  memberId     Int?
+  member       Member?  @relation(fields: [memberId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model EnrollmentToken {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  member     Member   @relation(fields: [memberId], references: [id])
+  memberId   Int
+  username   String?
+  expiresAt  DateTime?
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+}
