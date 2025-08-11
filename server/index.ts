@@ -179,5 +179,25 @@ app.use(express.static('client/dist'));
 app.get('*', (_req,res)=>res.sendFile('client/dist/index.html',{root:'.'}));
 
 app.listen(process.env.PORT || 8080, () => {
+async function bootstrapAdmin() {
+  try {
+    if (process.env.ADMIN_BOOTSTRAP !== '1') return;
+    const count = await prisma.user.count();
+    if (count > 0) return;
+
+    const username = process.env.ADMIN_USERNAME || 'odf-admin';
+    const pw = process.env.ADMIN_PASSWORD || 'SuperSecurePass!24';
+    const hash = await bcrypt.hash(pw, 11);
+
+    await prisma.user.create({
+      data: { username, passwordHash: hash, role: 'ADMIN' }
+    });
+
+    console.log(`✅ Admin created: ${username}`);
+  } catch (e) {
+    console.error('bootstrapAdmin error', e);
+  }
+}
+
   console.log('API on', process.env.PORT || 8080);
 });
