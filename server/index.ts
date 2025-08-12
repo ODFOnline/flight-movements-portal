@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
+import { execSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 import { extract, parse } from './pdf.js';
 
@@ -178,6 +179,19 @@ app.get('/api/itineraries/:id/pdf', requireAuth, async (req: any, res: any) => {
 app.use(express.static('client/dist'));
 app.get('*', (_req, res) => res.sendFile('client/dist/index.html', { root: '.' }));
 
+// Ensure DB schema exists (free plan friendly)
+function ensureDb() {
+  try {
+    // Create tables according to schema without migrations
+    execSync('npx prisma db push --schema=server/schema.prisma', { stdio: 'inherit' });
+    // Generate Prisma client
+    execSync('npx prisma generate --schema=server/schema.prisma', { stdio: 'inherit' });
+    console.log('✅ Database ready');
+  } catch (e) {
+    console.error('DB prepare failed', e);
+  }
+}
+
 // --- Create first admin automatically (only when ADMIN_BOOTSTRAP=1) ---
 async function bootstrapAdmin() {
   try {
@@ -199,8 +213,9 @@ async function bootstrapAdmin() {
   }
 }
 
-// Start server and call bootstrap
+// Start server
 app.listen(process.env.PORT || 8080, async () => {
   console.log('API on', process.env.PORT || 8080);
+  ensureDb();
   await bootstrapAdmin();
 });
