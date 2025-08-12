@@ -10,11 +10,11 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { execSync } from 'node:child_process';
-import { PrismaClient } from '@prisma/client';
 import { extract, parse } from './pdf.js';
 
 const app = express();
-const prisma = new PrismaClient();
+// We'll initialize Prisma AFTER we generate the client
+let prisma: any;
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -179,12 +179,10 @@ app.get('/api/itineraries/:id/pdf', requireAuth, async (req: any, res: any) => {
 app.use(express.static('client/dist'));
 app.get('*', (_req, res) => res.sendFile('client/dist/index.html', { root: '.' }));
 
-// Ensure DB schema exists (free plan friendly)
+// Prepare DB schema & client (free plan friendly)
 function ensureDb() {
   try {
-    // Create tables according to schema without migrations
     execSync('npx prisma db push --schema=server/schema.prisma', { stdio: 'inherit' });
-    // Generate Prisma client
     execSync('npx prisma generate --schema=server/schema.prisma', { stdio: 'inherit' });
     console.log('✅ Database ready');
   } catch (e) {
@@ -213,9 +211,12 @@ async function bootstrapAdmin() {
   }
 }
 
-// Start server
-app.listen(process.env.PORT || 8080, async () => {
-  console.log('API on', process.env.PORT || 8080);
+// Boot sequence: generate Prisma → init client → seed admin → start server
+(async () => {
   ensureDb();
+  const { PrismaClient } = await import('@prisma/client');
+  prisma = new PrismaClient();
+  const port = process.env.PORT || 8080;
   await bootstrapAdmin();
-});
+  app.listen(port, () => console.log('API on', port));
+})();
