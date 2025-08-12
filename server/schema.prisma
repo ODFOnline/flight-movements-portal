@@ -10,13 +10,14 @@ datasource db {
 }
 
 model Member {
-  id          Int          @id @default(autoincrement())
-  fullName    String       @unique
+  id          Int               @id @default(autoincrement())
+  fullName    String            @unique
   knownAs     String?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime          @default(now())
   flights     Flight[]
   itineraries Itinerary[]
   users       User[]
+  tokens      EnrollmentToken[]  // back-relation for EnrollmentToken.member
 }
 
 model Itinerary {
@@ -49,16 +50,12 @@ model Flight {
   itineraryId Int
 }
 
-enum Role {
-  USER
-  ADMIN
-}
-
+// Use a simple string for role (SQLite complains about enums on some builds)
 model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
   passwordHash String
-  role         Role     @default(USER)
+  role         String   @default("USER") // "USER" or "ADMIN"
   memberId     Int?
   member       Member?  @relation(fields: [memberId], references: [id])
   createdAt    DateTime @default(now())
