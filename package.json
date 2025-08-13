@@ -4,18 +4,17 @@
   "description": "Flight Movements Portal – PDF-driven app",
   "type": "module",
   "main": "dist/server/index.js",
- "scripts": {
-  "postinstall": "prisma generate --schema=server/schema.prisma",
-  "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
-  "dev:client": "vite --config client/vite.config.ts",
-  "dev:server": "tsx watch server/index.ts",
-  "build": "npm run build:client && tsc -p tsconfig.server.json",
-  "build:client": "vite build --config client/vite.config.ts",
-  "start": "node dist/server/index.js"
-}
+  "scripts": {
+    "postinstall": "prisma generate --schema=server/schema.prisma",
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "vite --config client/vite.config.ts",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "npm run build:client && tsc -p tsconfig.server.json",
+    "build:client": "vite build --config client/vite.config.ts",
+    "start": "node dist/server/index.js"
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
