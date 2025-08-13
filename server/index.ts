@@ -10,11 +10,11 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { execSync } from 'node:child_process';
+import { PrismaClient } from '@prisma/client';
 import { extract, parse } from './pdf.js';
 
 const app = express();
-// We'll initialize Prisma AFTER we generate the client
-let prisma: any;
+const prisma = new PrismaClient();
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -47,6 +47,43 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// --- TEMP ADMIN SEED ROUTE ---
+app.get('/api/_seed_admin', async (req: any, res: any) => {
+  try {
+    if (process.env.ADMIN_TEMP_SEED !== '1') {
+      return res.status(403).json({ error: 'disabled' });
+    }
+    const token = String(req.query.token || '');
+    if (!token || token !== (process.env.ADMIN_RESET_TOKEN || '')) {
+      return res.status(403).json({ error: 'bad token' });
+    }
+
+    const username = process.env.ADMIN_USERNAME || 'odf-admin';
+    const pw = process.env.ADMIN_PASSWORD || 'SuperSecurePass!24';
+
+    const existing = await prisma.user.findUnique({ where: { username } }).catch(() => null);
+    const hash = await bcrypt.hash(pw, 11);
+
+    if (existing) {
+      await prisma.user.update({
+        where: { username },
+        data: { passwordHash: hash, role: 'ADMIN' }
+      });
+      console.log(`🔐 Admin password reset for ${username}`);
+      return res.json({ ok: true, action: 'reset' });
+    } else {
+      await prisma.user.create({
+        data: { username, passwordHash: hash, role: 'ADMIN' }
+      });
+      console.log(`✅ Admin created: ${username}`);
+      return res.json({ ok: true, action: 'created' });
+    }
+  } catch (e) {
+    console.error('seed_admin error', e);
+    res.status(500).json({ error: 'seed_failed' });
+  }
+});
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body || {};
@@ -179,7 +216,6 @@ app.get('/api/itineraries/:id/pdf', requireAuth, async (req: any, res: any) => {
 app.use(express.static('client/dist'));
 app.get('*', (_req, res) => res.sendFile('client/dist/index.html', { root: '.' }));
 
-// Prepare DB schema & client (free plan friendly)
 function ensureDb() {
   try {
     execSync('npx prisma db push --schema=server/schema.prisma', { stdio: 'inherit' });
@@ -190,33 +226,7 @@ function ensureDb() {
   }
 }
 
-// --- Create first admin automatically (only when ADMIN_BOOTSTRAP=1) ---
-async function bootstrapAdmin() {
-  try {
-    if (process.env.ADMIN_BOOTSTRAP !== '1') return;
-    const count = await prisma.user.count();
-    if (count > 0) return;
-
-    const username = process.env.ADMIN_USERNAME || 'odf-admin';
-    const pw = process.env.ADMIN_PASSWORD || 'SuperSecurePass!24';
-    const hash = await bcrypt.hash(pw, 11);
-
-    await prisma.user.create({
-      data: { username, passwordHash: hash, role: 'ADMIN' }
-    });
-
-    console.log(`✅ Admin created: ${username}`);
-  } catch (e) {
-    console.error('bootstrapAdmin error', e);
-  }
-}
-
-// Boot sequence: generate Prisma → init client → seed admin → start server
-(async () => {
+app.listen(process.env.PORT || 8080, async () => {
+  console.log('API on', process.env.PORT || 8080);
   ensureDb();
-  const { PrismaClient } = await import('@prisma/client');
-  prisma = new PrismaClient();
-  const port = process.env.PORT || 8080;
-  await bootstrapAdmin();
-  app.listen(port, () => console.log('API on', port));
-})();
+});
