@@ -10,11 +10,12 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { execSync } from 'node:child_process';
-import { PrismaClient } from '@prisma/client';
 import { extract, parse } from './pdf.js';
 
 const app = express();
-const prisma = new PrismaClient();
+// IMPORTANT: do not import PrismaClient at the top.
+// We'll load it later, after generating the client.
+let prisma: any;
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -51,13 +52,9 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 // --- TEMP ADMIN SEED ROUTE ---
 app.get('/api/_seed_admin', async (req: any, res: any) => {
   try {
-    if (process.env.ADMIN_TEMP_SEED !== '1') {
-      return res.status(403).json({ error: 'disabled' });
-    }
+    if (process.env.ADMIN_TEMP_SEED !== '1') return res.status(403).json({ error: 'disabled' });
     const token = String(req.query.token || '');
-    if (!token || token !== (process.env.ADMIN_RESET_TOKEN || '')) {
-      return res.status(403).json({ error: 'bad token' });
-    }
+    if (!token || token !== (process.env.ADMIN_RESET_TOKEN || '')) return res.status(403).json({ error: 'bad token' });
 
     const username = process.env.ADMIN_USERNAME || 'odf-admin';
     const pw = process.env.ADMIN_PASSWORD || 'SuperSecurePass!24';
@@ -66,16 +63,11 @@ app.get('/api/_seed_admin', async (req: any, res: any) => {
     const hash = await bcrypt.hash(pw, 11);
 
     if (existing) {
-      await prisma.user.update({
-        where: { username },
-        data: { passwordHash: hash, role: 'ADMIN' }
-      });
+      await prisma.user.update({ where: { username }, data: { passwordHash: hash, role: 'ADMIN' } });
       console.log(`🔐 Admin password reset for ${username}`);
       return res.json({ ok: true, action: 'reset' });
     } else {
-      await prisma.user.create({
-        data: { username, passwordHash: hash, role: 'ADMIN' }
-      });
+      await prisma.user.create({ data: { username, passwordHash: hash, role: 'ADMIN' } });
       console.log(`✅ Admin created: ${username}`);
       return res.json({ ok: true, action: 'created' });
     }
@@ -216,6 +208,7 @@ app.get('/api/itineraries/:id/pdf', requireAuth, async (req: any, res: any) => {
 app.use(express.static('client/dist'));
 app.get('*', (_req, res) => res.sendFile('client/dist/index.html', { root: '.' }));
 
+// Ensure DB schema & Prisma client exist BEFORE creating PrismaClient
 function ensureDb() {
   try {
     execSync('npx prisma db push --schema=server/schema.prisma', { stdio: 'inherit' });
@@ -226,7 +219,14 @@ function ensureDb() {
   }
 }
 
-app.listen(process.env.PORT || 8080, async () => {
-  console.log('API on', process.env.PORT || 8080);
+// Boot sequence — generate ✓ then import Prisma ✓ then start server
+(async () => {
   ensureDb();
-});
+  const { PrismaClient } = await import('@prisma/client');
+  prisma = new PrismaClient();
+
+  const port = process.env.PORT || 8080;
+  app.listen(port, () => {
+    console.log('API on', port);
+  });
+})();
