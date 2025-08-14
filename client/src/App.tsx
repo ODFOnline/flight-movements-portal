@@ -41,15 +41,12 @@ export default function App() {
   const [movements, setMovements] = useState<MovementsResp['data']>([]);
   const [q, setQ] = useState('');
 
-  // Fast check: if API is up, just show login (we're not doing session restore on free plan)
   useEffect(() => {
     (async () => {
       try {
         const ping = await fetch('/api/health', { credentials: 'include' });
         if (ping.ok) setStage('login'); else setStage('login');
-      } catch {
-        setStage('login');
-      }
+      } catch { setStage('login'); }
     })();
   }, []);
 
@@ -72,6 +69,40 @@ export default function App() {
     setMovements(data.data || []);
   }
 
+  // --- Admin uploads ---
+  const [rosterMsg, setRosterMsg] = useState<string>('');
+  const [pdfMsg, setPdfMsg] = useState<string>('');
+
+  async function uploadRoster(file: File) {
+    setRosterMsg('Uploading roster…');
+    const fd = new FormData();
+    fd.append('roster', file);
+    const res = await fetch('/api/admin/upload-roster', { method: 'POST', body: fd, credentials: 'include' });
+    const txt = await res.text();
+    try {
+      const json = JSON.parse(txt);
+      if (!res.ok) throw json;
+      setRosterMsg(`Imported ${json.imported} members`);
+    } catch {
+      setRosterMsg(`Error: ${txt || res.status}`);
+    }
+  }
+
+  async function uploadPdfs(files: FileList) {
+    setPdfMsg('Uploading PDFs…');
+    const fd = new FormData();
+    Array.from(files).forEach(f => fd.append('pdfs', f));
+    const res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'include' });
+    const txt = await res.text();
+    try {
+      const json = JSON.parse(txt);
+      if (!res.ok) throw json;
+      setPdfMsg(`Imported ${json.imported?.length ?? 0} PDFs`);
+    } catch {
+      setPdfMsg(`Error: ${txt || res.status}`);
+    }
+  }
+
   function fmt(dt?: string) {
     if (!dt) return '';
     const d = new Date(dt);
@@ -80,7 +111,7 @@ export default function App() {
 
   if (stage !== 'dashboard') {
     return (
-      <div style={{ maxWidth: 420, margin: '80px auto', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto' }}>
+      <div style={{ maxWidth: 520, margin: '80px auto', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto' }}>
         <h1 style={{ marginBottom: 8 }}>Flight Movements</h1>
         <p style={{ color: '#666', marginTop: 0 }}>Sign in to view movements and itineraries.</p>
         <form onSubmit={doLogin} style={{ display: 'grid', gap: 10 }}>
@@ -95,17 +126,34 @@ export default function App() {
           {loginErr && <div style={{ color: '#b00020' }}>{loginErr}</div>}
           <button type="submit" style={{ padding: '10px 14px' }}>Log in</button>
         </form>
-        <div style={{ marginTop: 24, fontSize: 12, color: '#888' }}>
-          Tip: your admin login is <code>odf-admin</code> / <code>SuperSecurePass!24</code>
-        </div>
       </div>
     );
   }
 
   const isAdmin = who?.role === 'ADMIN';
+
   return (
-    <div style={{ maxWidth: 960, margin: '40px auto', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto' }}>
+    <div style={{ maxWidth: 1000, margin: '30px auto', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto' }}>
       <h2 style={{ marginBottom: 8 }}>Welcome {who?.name ? who.name : isAdmin ? 'Admin' : ''}</h2>
+
+      {isAdmin && (
+        <div style={{ padding: 16, border: '1px solid #eee', borderRadius: 8, marginBottom: 18 }}>
+          <h3 style={{ marginTop: 0 }}>Admin</h3>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div>
+              <strong>Upload Roster (.xlsx)</strong><br />
+              <input type="file" accept=".xlsx" onChange={e => e.target.files && e.target.files[0] && uploadRoster(e.target.files[0])} />
+              <div style={{ fontSize: 12, color: '#555' }}>{rosterMsg}</div>
+            </div>
+            <div>
+              <strong>Upload Itinerary PDFs</strong><br />
+              <input type="file" accept=".pdf" multiple onChange={e => e.target.files && e.target.files.length && uploadPdfs(e.target.files)} />
+              <div style={{ fontSize: 12, color: '#555' }}>{pdfMsg}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
         {isAdmin && (
           <>
@@ -122,7 +170,7 @@ export default function App() {
       </div>
 
       {movements.length === 0 ? (
-        <div style={{ color: '#666' }}>No movement data yet. Upload a roster and PDF itineraries from the Admin tab.</div>
+        <div style={{ color: '#666' }}>No movement data yet. Upload a roster and PDF itineraries from the Admin box above.</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
